@@ -3,32 +3,29 @@
 import math
 import sys
 import time
-import torch
-import torchvision
-
-# from dent_faster_rcnn.imports import *
-from imports import *
-# from dent_faster_rcnn.coco_utils import get_coco_api_from_dataset
-from coco_utils import get_coco_api_from_dataset
-# from dent_faster_rcnn.coco_eval import CocoEvaluator
-from coco_eval import CocoEvaluator
-import utils
 
 from tensorboardX import SummaryWriter
 
+import torch
+import utils
+from coco_eval import CocoEvaluator
+from coco_utils import get_coco_api_from_dataset
+from imports import *
+
 writer = SummaryWriter()
 num_iters = 0
+
 
 def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
     global num_iters
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
-    metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    header = 'Epoch: [{}]'.format(epoch)
+    metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value:.6f}"))
+    header = "Epoch: [{}]".format(epoch)
 
     lr_scheduler = None
     if epoch == 0:
-        warmup_factor = 1. / 1000
+        warmup_factor = 1.0 / 1000
         warmup_iters = min(1000, len(data_loader) - 1)
 
         lr_scheduler = utils.warmup_lr_scheduler(optimizer, warmup_iters, warmup_factor)
@@ -48,14 +45,12 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
 
         loss_value = losses_reduced.item()
 
-        writer.add_scalar('Loss/train', loss_value, num_iters)
-        writer.add_scalar('Learning rate', optimizer.param_groups[0]["lr"], num_iters)
-        writer.add_scalar('Momentum', optimizer.param_groups[0]["momentum"], num_iters)
+        writer.add_scalar("Loss/train", loss_value, num_iters)
+        writer.add_scalar("Learning rate", optimizer.param_groups[0]["lr"], num_iters)
+        writer.add_scalar("Momentum", optimizer.param_groups[0]["momentum"], num_iters)
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
-            print('area:', targets['area'])
-            print('bboxes:', targets['boxes'])
             print(loss_dict_reduced)
             sys.exit(1)
 
@@ -69,12 +64,14 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
         metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
+
 def _get_iou_types(model):
     model_without_ddp = model
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model_without_ddp = model.module
     iou_types = ["bbox"]
     return iou_types
+
 
 @torch.no_grad()
 def evaluate(model, data_loader, device):
@@ -85,12 +82,13 @@ def evaluate(model, data_loader, device):
     cpu_device = torch.device("cpu")
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
-    header = 'Test:'
+    header = "Test:"
     model.to(device)
     iou_types = _get_iou_types(model)
     coco_evaluator = CocoEvaluator(coco, iou_types)
     to_tensor = torchvision.transforms.ToTensor()
     for image, targets in metric_logger.log_every(data_loader, 100, header):
+
         image = list(to_tensor(img).to(device) for img in image)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
         torch.cuda.synchronize()
@@ -101,7 +99,10 @@ def evaluate(model, data_loader, device):
         outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
         model_time = time.time() - model_time
 
-        res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
+        res = {
+            target["image_id"].item(): output
+            for target, output in zip(targets, outputs)
+        }
         evaluator_time = time.time()
         coco_evaluator.update(res)
         evaluator_time = time.time() - evaluator_time
